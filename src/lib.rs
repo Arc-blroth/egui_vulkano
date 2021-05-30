@@ -4,9 +4,7 @@ use egui::{Color32, CtxRef, Rect};
 use epaint::{ClippedMesh, ClippedShape};
 use vulkano::buffer::{BufferSlice, BufferUsage, CpuAccessibleBuffer};
 use vulkano::command_buffer::SubpassContents::Inline;
-use vulkano::command_buffer::{
-    AutoCommandBufferBuilder, AutoCommandBufferBuilderContextError, DrawIndexedError, DynamicState,
-};
+use vulkano::command_buffer::{AutoCommandBufferBuilder, AutoCommandBufferBuilderContextError, DrawIndexedError, DynamicState, PrimaryAutoCommandBuffer};
 use vulkano::descriptor::descriptor_set::{
     DescriptorSet, PersistentDescriptorSet, PersistentDescriptorSetBuildError,
     PersistentDescriptorSetError,
@@ -14,7 +12,6 @@ use vulkano::descriptor::descriptor_set::{
 use vulkano::descriptor::PipelineLayoutAbstract;
 use vulkano::device::{Device, Queue};
 use vulkano::format::Format;
-use vulkano::framebuffer::{RenderPassAbstract, Subpass};
 use vulkano::image::ImageDimensions;
 use vulkano::image::{ImageCreationError, ImmutableImage, MipmapsCount};
 use vulkano::pipeline::blend::{AttachmentBlend, BlendFactor};
@@ -59,6 +56,8 @@ vulkano::impl_vertex!(Vertex, pos, uv, color);
 use thiserror::Error;
 use vulkano::image::view::{ImageView, ImageViewCreationError};
 use vulkano::memory::DeviceMemoryAllocError;
+use vulkano::render_pass::Subpass;
+use vulkano::command_buffer::pool::CommandPoolBuilderAlloc;
 
 #[derive(Error, Debug)]
 pub enum PainterCreationError {
@@ -92,30 +91,29 @@ pub enum DrawError {
     DrawIndexedFailed(#[from] DrawIndexedError),
 }
 
-pub type EguiPipeline<Rp> = GraphicsPipeline<
+pub type EguiPipeline = GraphicsPipeline<
     SingleBufferDefinition<Vertex>,
     Box<dyn PipelineLayoutAbstract + Send + Sync>,
-    Rp,
 >;
 
-pub struct Painter<Rp: RenderPassAbstract> {
+pub struct Painter {
     pub texture_version: u64,
     pub device: Arc<Device>,
     pub queue: Arc<Queue>,
-    pub pipeline: Arc<EguiPipeline<Rp>>,
-    pub subpass: Subpass<Rp>,
+    pub pipeline: Arc<EguiPipeline>,
+    pub subpass: Subpass,
     pub sampler: Arc<Sampler>,
     pub set: Option<Arc<dyn DescriptorSet + Send + Sync>>,
 }
 
-impl<Rp: RenderPassAbstract + Clone + Send + Sync + 'static> Painter<Rp> {
+impl Painter {
     /// This is all you need to render your gui.
     /// Pass in your vulkano `Device`, `Queue` and the `Subpass`
     /// that you want to use to render the gui
     pub fn new(
         device: Arc<Device>,
         queue: Arc<Queue>,
-        subpass: Subpass<Rp>,
+        subpass: Subpass,
     ) -> Result<Self, PainterCreationError> {
         let pipeline = create_pipeline(device.clone(), subpass.clone())?;
         let sampler = create_sampler(device.clone())?;
@@ -151,14 +149,17 @@ impl<Rp: RenderPassAbstract + Clone + Send + Sync + 'static> Painter<Rp> {
     }
 
     /// Pass in the `ClippedShape`s that egui gives us to draw the gui
-    pub fn draw(
+    pub fn draw<P>(
         &mut self,
-        builder: &mut AutoCommandBufferBuilder,
+        builder: &mut AutoCommandBufferBuilder<PrimaryAutoCommandBuffer<P::Alloc>, P>,
         dynamic_state: &DynamicState,
         window_size_points: [f32; 2],
         egui_ctx: &CtxRef,
         clipped_shapes: Vec<ClippedShape>,
-    ) -> Result<(), DrawError> {
+    ) -> Result<(), DrawError>
+    where
+        P: CommandPoolBuilderAlloc,
+    {
         self.update_set(egui_ctx)?;
         builder.next_subpass(Inline)?;
         let clipped_meshes: Vec<ClippedMesh> = egui_ctx.tessellate(clipped_shapes);
@@ -250,10 +251,10 @@ impl<Rp: RenderPassAbstract + Clone + Send + Sync + 'static> Painter<Rp> {
 }
 
 /// Create a graphics pipeline with the shaders and settings necessary to render egui output
-fn create_pipeline<Rp: RenderPassAbstract>(
+fn create_pipeline(
     device: Arc<Device>,
-    subpass: Subpass<Rp>,
-) -> Result<Arc<EguiPipeline<Rp>>, GraphicsPipelineCreationError> {
+    subpass: Subpass,
+) -> Result<Arc<EguiPipeline>, GraphicsPipelineCreationError> {
     let vs = shaders::vs::Shader::load(device.clone()).unwrap();
     let fs = shaders::fs::Shader::load(device.clone()).unwrap();
 
@@ -292,7 +293,7 @@ fn create_sampler(device: Arc<Device>) -> Result<Arc<Sampler>, SamplerCreationEr
     )
 }
 
-type EguiTexture = ImmutableImage<Format>;
+type EguiTexture = ImmutableImage;
 
 #[derive(Debug, Error)]
 pub enum CreateTextureError {
