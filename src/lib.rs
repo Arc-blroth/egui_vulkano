@@ -4,20 +4,23 @@ use egui::{Color32, CtxRef, Rect};
 use epaint::{ClippedMesh, ClippedShape};
 use vulkano::buffer::{BufferSlice, BufferUsage, CpuAccessibleBuffer};
 use vulkano::command_buffer::SubpassContents::Inline;
-use vulkano::command_buffer::{AutoCommandBufferBuilder, AutoCommandBufferBuilderContextError, DrawIndexedError, DynamicState, PrimaryAutoCommandBuffer};
+use vulkano::command_buffer::{
+    AutoCommandBufferBuilder, AutoCommandBufferBuilderContextError, DrawIndexedError, DynamicState,
+    PrimaryAutoCommandBuffer,
+};
 use vulkano::descriptor::descriptor_set::{
     DescriptorSet, PersistentDescriptorSet, PersistentDescriptorSetBuildError,
     PersistentDescriptorSetError,
 };
-use vulkano::descriptor::PipelineLayoutAbstract;
 use vulkano::device::{Device, Queue};
 use vulkano::format::Format;
-use vulkano::image::ImageDimensions;
-use vulkano::image::{ImageCreationError, ImmutableImage, MipmapsCount};
+use vulkano::image::{ImageCreationError, ImageDimensions, ImmutableImage, MipmapsCount};
 use vulkano::pipeline::blend::{AttachmentBlend, BlendFactor};
 use vulkano::pipeline::vertex::SingleBufferDefinition;
 use vulkano::pipeline::viewport::Scissor;
-use vulkano::pipeline::{GraphicsPipeline, GraphicsPipelineCreationError};
+use vulkano::pipeline::{
+    GraphicsPipeline, GraphicsPipelineAbstract, GraphicsPipelineCreationError,
+};
 use vulkano::sampler::{Filter, MipmapMode, Sampler, SamplerAddressMode, SamplerCreationError};
 use vulkano::sync::{FlushError, GpuFuture};
 
@@ -54,10 +57,10 @@ impl From<&epaint::Vertex> for Vertex {
 vulkano::impl_vertex!(Vertex, pos, uv, color);
 
 use thiserror::Error;
+use vulkano::command_buffer::pool::CommandPoolBuilderAlloc;
 use vulkano::image::view::{ImageView, ImageViewCreationError};
 use vulkano::memory::DeviceMemoryAllocError;
 use vulkano::render_pass::Subpass;
-use vulkano::command_buffer::pool::CommandPoolBuilderAlloc;
 
 #[derive(Error, Debug)]
 pub enum PainterCreationError {
@@ -91,10 +94,7 @@ pub enum DrawError {
     DrawIndexedFailed(#[from] DrawIndexedError),
 }
 
-pub type EguiPipeline = GraphicsPipeline<
-    SingleBufferDefinition<Vertex>,
-    Box<dyn PipelineLayoutAbstract + Send + Sync>,
->;
+pub type EguiPipeline = GraphicsPipeline<SingleBufferDefinition<Vertex>>;
 
 pub struct Painter {
     pub texture_version: u64,
