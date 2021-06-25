@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use egui::{Color32, CtxRef, Rect};
 use epaint::{ClippedMesh, ClippedShape};
+use smallvec::{smallvec, SmallVec};
 use vulkano::buffer::{BufferSlice, BufferUsage, CpuAccessibleBuffer};
 use vulkano::command_buffer::SubpassContents::Inline;
 use vulkano::command_buffer::{
@@ -236,14 +237,14 @@ impl Painter {
             self.device.clone(),
             BufferUsage::vertex_buffer(),
             false,
-            triangles.0.iter().cloned(),
+            triangles.0.into_iter(),
         )?;
 
         let index_buffer = CpuAccessibleBuffer::from_iter(
             self.device.clone(),
             BufferUsage::index_buffer(),
             false,
-            triangles.1.iter().cloned(),
+            triangles.1.into_iter(),
         )?;
 
         Ok((vertex_buffer, index_buffer))
@@ -314,14 +315,16 @@ fn create_font_texture(
         array_layers: 1,
     };
 
-    let image_data = &texture
+    let image_data = texture
         .pixels
         .iter()
-        .flat_map(|&r| vec![r, r, r, r])
+        .flat_map(|&r| -> SmallVec<[u8; 4]> {
+            smallvec![r, r, r, r]
+        })
         .collect::<Vec<_>>();
 
     let (image, image_future) = ImmutableImage::from_iter(
-        image_data.iter().cloned(),
+        image_data.into_iter(),
         dimensions,
         MipmapsCount::One,
         Format::R8G8B8A8Unorm, // &texture.pixels uses linear color space
