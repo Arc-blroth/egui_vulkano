@@ -6,7 +6,7 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::Instant;
 
-use egui::plot::{Curve, Plot, Value};
+use egui::plot::{HLine, Line, Plot, Value, Values};
 use egui::{Color32, FontDefinitions, Ui};
 use egui_winit_platform::{Platform, PlatformDescriptor};
 use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer};
@@ -419,22 +419,23 @@ impl Benchmark {
             .iter()
             .enumerate()
             .map(|(i, v)| Value::new(i as f64, *v * 1000.0));
-        let curve = Curve::from_values_iter(iter).color(Color32::BLUE);
-        // TODO: Hlines are now private and I'm not sure why
+        let curve = Line::new(Values::from_values_iter(iter)).color(Color32::BLUE);
+        // As of egui 0.13.0 it is impossible to set the color of an HLine
+        // see https://github.com/emilk/egui/issues/524
         // let red = Stroke::new(2.0, Color32::RED);
-        // let zero = HLine::new(0.0, Stroke::none());
-        // let target = HLine::new(1000.0 / 60.0, red);
+        let zero = HLine::new(0.0);
+        let target = HLine::new(1000.0 / 60.0);
 
         let plot = Plot::new("plot")
             .height(300.0)
             .width(700.0)
-            .curve(curve);
-            // .hline(zero)
-            // .hline(target);
+            .line(curve)
+            .hline(zero)
+            .hline(target);
 
         ui.label("Time in milliseconds that each frame took to draw:");
         ui.add(plot);
-        ui.label("The red line marks the frametime target for drawing at 60 FPS.");
+        ui.label("The light blue line marks the frametime target for drawing at 60 FPS.");
     }
 
     pub fn push(&mut self, v: f64) {
